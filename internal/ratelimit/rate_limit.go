@@ -28,6 +28,8 @@ type Monitor struct {
 	reset     time.Time // last RateLimit-Reset HTTP response header value
 	retry     time.Time // deadline based on Retry-After HTTP response header value
 
+	reservations int
+
 	clock func() time.Time
 }
 
@@ -36,7 +38,7 @@ func (c *Monitor) Get() (remaining int, reset, retry time.Duration, known bool) 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.now()
-	return c.remaining, c.reset.Sub(now), c.retry.Sub(now), c.known
+	return c.remaining - c.reservations, c.reset.Sub(now), c.retry.Sub(now), c.known
 }
 
 // TODO(keegancsmith) Update RecommendedWaitForBackgroundOp to work with other
@@ -81,7 +83,7 @@ func (c *Monitor) RecommendedWaitForBackgroundOp(cost int) time.Duration {
 	}
 
 	// If our rate limit info is out of date, assume it was reset.
-	limitRemaining := float64(c.remaining)
+	limitRemaining := float64(c.remaining - c.reservations)
 	resetAt := c.reset
 	if now.After(c.reset) {
 		limitRemaining = float64(c.limit)
@@ -109,62 +111,18 @@ func (c *Monitor) RecommendedWaitForBackgroundOp(cost int) time.Duration {
 	return timeRemaining * time.Duration(cost) / time.Duration(limitRemaining)
 }
 
-func (c *Monitor) SleepRecommendedTimeForBackgroundOp(ctx context.Context, rateLimiter *rate.Limiter, cost int) error {
-	waitTime := c.RecommendedWaitForBackgroundOp(cost)
-
-	r := rateLimiter.ReserveN(c.now(), cost)
-	if !r.OK() {
-		return fmt.Errorf("cannot reserve %d", cost)
-	}
-	rlWaitTime := r.DelayFrom(c.now())
-	fmt.Printf("rateLimit wants to wait for %s\n", rlWaitTime)
-
-	biggerDelay := waitTime
-	if rlWaitTime > waitTime {
-		biggerDelay = rlWaitTime
-	}
-
-	fmt.Printf("I want to wait for %s\n", biggerDelay)
-
-	if biggerDelay.Milliseconds() == 0 {
-		return nil
-	}
-	if deadline, ok := ctx.Deadline(); ok {
-		untilDead := deadline.Sub(c.now())
-		if untilDead < biggerDelay {
-			return errors.New("cannot reserve, would exceed context deadline")
-		}
-	}
-
-	// Reserve tokens
-	c.Reserve(cost)
-	t := time.NewTimer(biggerDelay)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		// We can proceed.
-		return nil
-	case <-ctx.Done():
-		// Context was canceled before we could proceed. Revert the
-		// reservation, which may permit other events to proceed sooner.
-		c.Release(cost)
-		r.Cancel()
-		return ctx.Err()
-	}
-}
-
 func (c *Monitor) Reserve(cost int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.remaining -= cost
+	c.reservations += cost
 }
 
 func (c *Monitor) Release(cost int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.remaining += cost
+	c.reservations -= cost
 }
 
 // Update updates the monitor's rate limit information based on the HTTP response headers.
@@ -307,7 +265,7 @@ func (r *MonitorRegistry) Get(baseURL, token string) *Monitor {
 
 // GetOrSet fetches the rate limiter associated with the given code host. If none has been configured
 // yet, the provided limiter will be set. A nil limiter will fall back to an infinite limiter.
-func (r *MonitorRegistry) GetOrSet(baseURL, token string, fallback *Monitor) *Monitor {
+func (r *MonitorRegistry) GetOrSet(prefix, baseURL, token string, fallback *Monitor) *Monitor {
 	baseURL = normaliseURL(baseURL)
 	if fallback == nil {
 		fallback = &Monitor{}
@@ -328,4 +286,53 @@ func (r *MonitorRegistry) Count() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.rateLimitMonitors)
+}
+
+func SleepRecommendedTimeForRateLimits(ctx context.Context, rateLimiter *rate.Limiter, monitor *Monitor, cost int) (err error) {
+	now := time.Now()
+	monitorWaitTime := monitor.RecommendedWaitForBackgroundOp(cost)
+
+	// Reserve N tokens in the rate limiter.
+	r := rateLimiter.ReserveN(now, cost)
+	if !r.OK() {
+		return fmt.Errorf("cannot reserve %d", cost)
+	}
+
+	// Determine the longer wait time, monitor or rate limiter.
+	rlWaitTime := r.DelayFrom(now)
+	biggerDelay := monitorWaitTime
+	if rlWaitTime > monitorWaitTime {
+		biggerDelay = rlWaitTime
+	}
+
+	// Shorthand for 0 case.
+	if biggerDelay.Milliseconds() == 0 {
+		return nil
+	}
+
+	// Test if the context deadline would be exceeded, then we should return early.
+	if deadline, ok := ctx.Deadline(); ok {
+		untilDead := deadline.Sub(now)
+		if untilDead < biggerDelay {
+			r.Cancel()
+			return errors.New("cannot reserve, would exceed context deadline")
+		}
+	}
+
+	// Reserve tokens on the monitor.
+	monitor.Reserve(cost)
+	defer monitor.Release(cost)
+
+	t := time.NewTimer(biggerDelay)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		// We can proceed.
+		return nil
+	case <-ctx.Done():
+		// Context was canceled before we could proceed. Revert the
+		// reservation, which may permit other events to proceed sooner.
+		r.Cancel()
+		return ctx.Err()
+	}
 }

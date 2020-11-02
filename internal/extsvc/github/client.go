@@ -71,8 +71,10 @@ type Client struct {
 	// repoCache is the repository cache associated with the token.
 	repoCache *rcache.Cache
 
-	// rateLimitMonitor is the API rate limit monitor.
-	rateLimitMonitor *ratelimit.Monitor
+	// v3RateLimitMonitor is the API rate limit monitor for the GitHub REST API.
+	v3RateLimitMonitor *ratelimit.Monitor
+	// v4RateLimitMonitor is the API rate limit monitor for the GitHub GraphQL API.
+	v4RateLimitMonitor *ratelimit.Monitor
 
 	// rateLimit is our self imposed rate limiter
 	rateLimit *rate.Limiter
@@ -153,15 +155,22 @@ func NewClient(apiURL *url.URL, a auth.Authenticator, cli httpcli.Doer) *Client 
 	})
 
 	rl := ratelimit.DefaultRegistry.Get(apiURL.String())
+	var tokenHash string
+	if a != nil {
+		tokenHash = a.Hash()
+	}
+	v3Rlm := ratelimit.DefaultMonitorRegistry.GetOrSet("v3", apiURL.String(), tokenHash, &ratelimit.Monitor{HeaderPrefix: "X-"})
+	v4Rlm := ratelimit.DefaultMonitorRegistry.GetOrSet("v4", apiURL.String(), tokenHash, &ratelimit.Monitor{HeaderPrefix: "X-"})
 
 	return &Client{
-		apiURL:           apiURL,
-		githubDotCom:     urlIsGitHubDotCom(apiURL),
-		auth:             a,
-		httpClient:       cli,
-		rateLimitMonitor: &ratelimit.Monitor{HeaderPrefix: "X-"},
-		repoCache:        newRepoCache(apiURL, a),
-		rateLimit:        rl,
+		apiURL:             apiURL,
+		githubDotCom:       urlIsGitHubDotCom(apiURL),
+		auth:               a,
+		httpClient:         cli,
+		v3RateLimitMonitor: v3Rlm,
+		v4RateLimitMonitor: v4Rlm,
+		repoCache:          newRepoCache(apiURL, a),
+		rateLimit:          rl,
 	}
 }
 
@@ -172,7 +181,7 @@ func (c *Client) WithAuthenticator(a auth.Authenticator) *Client {
 	return NewClient(c.apiURL, a, c.httpClient)
 }
 
-func (c *Client) do(ctx context.Context, req *http.Request, result interface{}) (err error) {
+func (c *Client) do(ctx context.Context, req *http.Request, result interface{}, updateRateLimitMonitor func(http.Header)) (err error) {
 	req.URL.Path = path.Join(c.apiURL.Path, req.URL.Path)
 	req.URL = c.apiURL.ResolveReference(req.URL)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -202,7 +211,7 @@ func (c *Client) do(ctx context.Context, req *http.Request, result interface{}) 
 	}
 
 	defer resp.Body.Close()
-	c.rateLimitMonitor.Update(resp.Header)
+	updateRateLimitMonitor(resp.Header)
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		var err APIError
 		if body, readErr := ioutil.ReadAll(io.LimitReader(resp.Body, 1<<13)); readErr != nil { // 8kb
@@ -276,7 +285,7 @@ func (c *Client) requestGet(ctx context.Context, requestURI string, result inter
 		return errors.Wrap(err, "rate limit")
 	}
 
-	return c.do(ctx, req, result)
+	return c.do(ctx, req, result, c.rateLimitMonitor.Update)
 }
 
 func (c *Client) requestGraphQL(ctx context.Context, query string, vars map[string]interface{}, result interface{}) (err error) {
@@ -315,11 +324,11 @@ func (c *Client) requestGraphQL(ctx context.Context, query string, vars map[stri
 		return errors.Wrap(err, "estimating graphql cost")
 	}
 
-	if err := c.rateLimitMonitor.SleepRecommendedTimeForBackgroundOp(ctx, c.rateLimit, cost); err != nil {
-		return errors.Wrap(err, "rate limit monitor")
+	if err := ratelimit.SleepRecommendedTimeForRateLimits(ctx, c.rateLimit, c.v4RateLimitMonitor, cost); err != nil {
+		return errors.Wrap(err, "rate limit")
 	}
 
-	if err := c.do(ctx, req, &respBody); err != nil {
+	if err := c.do(ctx, req, &respBody, c.v4RateLimitMonitor.Update); err != nil {
 		return err
 	}
 
@@ -337,9 +346,14 @@ func (c *Client) requestGraphQL(ctx context.Context, query string, vars map[stri
 	return err
 }
 
-// RateLimitMonitor exposes the rate limit monitor
-func (c *Client) RateLimitMonitor() *ratelimit.Monitor {
-	return c.rateLimitMonitor
+// V3RateLimitMonitor exposes the rate limit monitor for the REST API.
+func (c *Client) V3RateLimitMonitor() *ratelimit.Monitor {
+	return c.v3RateLimitMonitor
+}
+
+// V4RateLimitMonitor exposes the rate limit monitor for the GraphQL API.
+func (c *Client) V4RateLimitMonitor() *ratelimit.Monitor {
+	return c.v4RateLimitMonitor
 }
 
 // estimateGraphQLCost estimates the cost of the query as described here:
