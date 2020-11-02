@@ -19,13 +19,14 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 
+	"github.com/sourcegraph/sourcegraph/internal/extsvc/auth"
 	"github.com/sourcegraph/sourcegraph/internal/httpcli"
 	"github.com/sourcegraph/sourcegraph/internal/ratelimit"
 	"github.com/sourcegraph/sourcegraph/internal/rcache"
 	"github.com/sourcegraph/sourcegraph/internal/trace/ot"
 )
 
-// V4Client is a GitHub API client.
+// V4Client is a GitHub GraphQL API client.
 type V4Client struct {
 	// apiURL is the base URL of a GitHub API. It must point to the base URL of the GitHub API. This
 	// is https://api.github.com for GitHub.com and http[s]://[github-enterprise-hostname]/api for
@@ -35,11 +36,12 @@ type V4Client struct {
 	// githubDotCom is true if this client connects to github.com.
 	githubDotCom bool
 
-	// token is the personal access token used to authenticate requests. May be empty, in which case
-	// the default behavior is to make unauthenticated requests.
-	// 🚨 SECURITY: Should not be changed after client creation to prevent unauthorized access to the
-	// repository cache. Use `WithToken` to create a new client with a different token instead.
-	token string
+	// auth is used to authenticate requests. May be empty, in which case the
+	// default behavior is to make unauthenticated requests.
+	// 🚨 SECURITY: Should not be changed after client creation to prevent
+	// unauthorized access to the repository cache. Use `WithAuthenticator` to
+	// create a new client with a different authenticator instead.
+	auth auth.Authenticator
 
 	// httpClient is the HTTP client used to make requests to the GitHub API.
 	httpClient httpcli.Doer
