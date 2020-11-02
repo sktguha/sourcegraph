@@ -34,7 +34,6 @@ type GithubSource struct {
 	githubDotCom    bool
 	baseURL         *url.URL
 	client          *github.Client
-	v4Client        *github.V4Client
 	// searchClient is for using the GitHub search API, which has an independent
 	// rate limit much lower than non-search API requests.
 	searchClient *github.Client
@@ -118,7 +117,6 @@ func newGithubSource(svc *ExternalService, c *schema.GitHubConnection, cf *httpc
 		baseURL:          baseURL,
 		githubDotCom:     githubDotCom,
 		client:           github.NewClient(apiURL, token, cli),
-		v4Client:         github.NewV4Client(apiURL, token, cli),
 		searchClient:     github.NewClient(apiURL, token, cli),
 		originalHostname: originalHostname,
 	}, nil
@@ -185,7 +183,7 @@ func buildCreatePullRequestInput(c *Changeset) *github.CreatePullRequestInput {
 
 func (s GithubSource) createChangeset(ctx context.Context, c *Changeset, prInput *github.CreatePullRequestInput) (bool, error) {
 	var exists bool
-	pr, err := s.v4Client.CreatePullRequest(ctx, prInput)
+	pr, err := s.client.CreatePullRequest(ctx, prInput)
 	if err != nil {
 		if err != github.ErrPullRequestAlreadyExists {
 			return exists, err
@@ -195,7 +193,7 @@ func (s GithubSource) createChangeset(ctx context.Context, c *Changeset, prInput
 		if err != nil {
 			return exists, errors.Wrap(err, "getting repo owner and name")
 		}
-		pr, err = s.v4Client.GetOpenPullRequestByRefs(ctx, owner, name, c.BaseRef, c.HeadRef)
+		pr, err = s.client.GetOpenPullRequestByRefs(ctx, owner, name, c.BaseRef, c.HeadRef)
 		if err != nil {
 			return exists, errors.Wrap(err, "fetching existing PR")
 		}
@@ -217,7 +215,7 @@ func (s GithubSource) CloseChangeset(ctx context.Context, c *Changeset) error {
 		return errors.New("Changeset is not a GitHub pull request")
 	}
 
-	err := s.v4Client.ClosePullRequest(ctx, pr)
+	err := s.client.ClosePullRequest(ctx, pr)
 	if err != nil {
 		return err
 	}
@@ -232,7 +230,7 @@ func (s GithubSource) UndraftChangeset(ctx context.Context, c *Changeset) error 
 		return errors.New("Changeset is not a GitHub pull request")
 	}
 
-	err := s.v4Client.MarkPullRequestReadyForReview(ctx, pr)
+	err := s.client.MarkPullRequestReadyForReview(ctx, pr)
 	if err != nil {
 		return err
 	}
@@ -253,7 +251,7 @@ func (s GithubSource) LoadChangeset(ctx context.Context, cs *Changeset) error {
 		Number:        number,
 	}
 
-	if err := s.v4Client.LoadPullRequest(ctx, pr); err != nil {
+	if err := s.client.LoadPullRequest(ctx, pr); err != nil {
 		if github.IsNotFound(err) {
 			return ChangesetNotFoundError{Changeset: cs}
 		}
@@ -274,7 +272,7 @@ func (s GithubSource) UpdateChangeset(ctx context.Context, c *Changeset) error {
 		return errors.New("Changeset is not a GitHub pull request")
 	}
 
-	updated, err := s.v4Client.UpdatePullRequest(ctx, &github.UpdatePullRequestInput{
+	updated, err := s.client.UpdatePullRequest(ctx, &github.UpdatePullRequestInput{
 		PullRequestID: pr.ID,
 		Title:         c.Title,
 		Body:          c.Body,
@@ -295,7 +293,7 @@ func (s GithubSource) ReopenChangeset(ctx context.Context, c *Changeset) error {
 		return errors.New("Changeset is not a GitHub pull request")
 	}
 
-	err := s.v4Client.ReopenPullRequest(ctx, pr)
+	err := s.client.ReopenPullRequest(ctx, pr)
 	if err != nil {
 		return err
 	}
@@ -396,8 +394,9 @@ func (s *GithubSource) paginate(ctx context.Context, results chan *githubResult,
 		}
 
 		var pageRepos []*github.Repository
+		var cost int
 		var err error
-		pageRepos, hasNext, _, err = pager(page)
+		pageRepos, hasNext, cost, err = pager(page)
 		if err != nil {
 			results <- &githubResult{err: err}
 			return
@@ -405,6 +404,10 @@ func (s *GithubSource) paginate(ctx context.Context, results chan *githubResult,
 
 		for _, r := range pageRepos {
 			results <- &githubResult{repo: r}
+		}
+
+		if hasNext && cost > 0 {
+			time.Sleep(s.client.RateLimitMonitor().RecommendedWaitForBackgroundOp(cost))
 		}
 	}
 }
@@ -519,6 +522,8 @@ func (s *GithubSource) listRepos(ctx context.Context, repos []string, results ch
 		log15.Debug("github sync: GetRepository", "repo", repo.NameWithOwner)
 
 		results <- &githubResult{repo: repo}
+
+		time.Sleep(s.client.RateLimitMonitor().RecommendedWaitForBackgroundOp(1)) // 0-duration sleep unless nearing rate limit exhaustion
 	}
 }
 
@@ -733,6 +738,8 @@ func (s *GithubSource) fetchAllRepositoriesInBatches(ctx context.Context, result
 		for _, r := range repos {
 			results <- &githubResult{repo: r}
 		}
+
+		time.Sleep(s.client.RateLimitMonitor().RecommendedWaitForBackgroundOp(1)) // 0-duration sleep unless nearing rate limit exhaustion
 	}
 
 	return nil
