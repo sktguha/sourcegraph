@@ -312,8 +312,8 @@ func (c *Client) requestGraphQL(ctx context.Context, query string, vars map[stri
 		return errors.Wrap(err, "estimating graphql cost")
 	}
 
-	if err := c.rateLimit.WaitN(ctx, cost); err != nil {
-		return errors.Wrap(err, "rate limit")
+	if err := c.rateLimitMonitor.SleepRecommendedTimeForBackgroundOp(ctx, c.rateLimit, cost); err != nil {
+		return errors.Wrap(err, "rate limit monitor")
 	}
 
 	if err := c.do(ctx, req, &respBody); err != nil {
