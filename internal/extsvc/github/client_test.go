@@ -229,8 +229,8 @@ func TestClient_ListAffiliatedRepositories(t *testing.T) {
 	}
 }
 
-func TestV4Client_LoadPullRequest(t *testing.T) {
-	cli, save := newV4Client(t, "LoadPullRequest")
+func TestClient_LoadPullRequest(t *testing.T) {
+	cli, save := newClient(t, "LoadPullRequest")
 	defer save()
 
 	for i, tc := range []struct {
@@ -286,8 +286,8 @@ func TestV4Client_LoadPullRequest(t *testing.T) {
 	}
 }
 
-func TestV4Client_CreatePullRequest(t *testing.T) {
-	cli, save := newV4Client(t, "CreatePullRequest")
+func TestClient_CreatePullRequest(t *testing.T) {
+	cli, save := newClient(t, "CreatePullRequest")
 	defer save()
 
 	// Repository used: sourcegraph/automation-testing
@@ -372,8 +372,8 @@ func TestV4Client_CreatePullRequest(t *testing.T) {
 	}
 }
 
-func TestV4Client_ClosePullRequest(t *testing.T) {
-	cli, save := newV4Client(t, "ClosePullRequest")
+func TestClient_ClosePullRequest(t *testing.T) {
+	cli, save := newClient(t, "ClosePullRequest")
 	defer save()
 
 	// Repository used: sourcegraph/automation-testing
@@ -427,8 +427,8 @@ func TestV4Client_ClosePullRequest(t *testing.T) {
 	}
 }
 
-func TestV4Client_ReopenPullRequest(t *testing.T) {
-	cli, save := newV4Client(t, "ReopenPullRequest")
+func TestClient_ReopenPullRequest(t *testing.T) {
+	cli, save := newClient(t, "ReopenPullRequest")
 	defer save()
 
 	// Repository used: sourcegraph/automation-testing
@@ -472,8 +472,8 @@ func TestV4Client_ReopenPullRequest(t *testing.T) {
 	}
 }
 
-func TestV4Client_MarkPullRequestReadyForReview(t *testing.T) {
-	cli, save := newV4Client(t, "MarkPullRequestReadyForReview")
+func TestClient_MarkPullRequestReadyForReview(t *testing.T) {
+	cli, save := newClient(t, "MarkPullRequestReadyForReview")
 	defer save()
 
 	// Repository used: sourcegraph/automation-testing
@@ -549,25 +549,6 @@ func newClient(t testing.TB, name string) (*Client, func()) {
 	cli := NewClient(uri, &auth.OAuthBearerToken{
 		Token: os.Getenv("GITHUB_TOKEN"),
 	}, doer)
-
-	return cli, save
-}
-
-func newV4Client(t testing.TB, name string) (*V4Client, func()) {
-	t.Helper()
-
-	cf, save := httptestutil.NewGitHubRecorderFactory(t, update(name), name)
-	uri, err := url.Parse("https://github.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	doer, err := cf.Doer()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cli := NewV4Client(uri, os.Getenv("GITHUB_TOKEN"), doer)
 
 	return cli, save
 }
