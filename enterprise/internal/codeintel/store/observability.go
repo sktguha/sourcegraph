@@ -31,6 +31,7 @@ type ObservedStore struct {
 	hardDeleteUploadByIDOperation                  *observation.Operation
 	resetStalledOperation                          *observation.Operation
 	getDumpByIDOperation                           *observation.Operation
+	getDumpForCommitOperation                      *observation.Operation
 	findClosestDumpsOperation                      *observation.Operation
 	findClosestDumpsFromGraphFragmentOperation     *observation.Operation
 	deleteOldestDumpOperation                      *observation.Operation
@@ -170,6 +171,11 @@ func NewObserved(store Store, observationContext *observation.Context) Store {
 		getDumpByIDOperation: observationContext.Operation(observation.Op{
 			Name:         "store.GetDumpByID",
 			MetricLabels: []string{"get_dump_by_id"},
+			Metrics:      metrics,
+		}),
+		getDumpForCommitOperation: observationContext.Operation(observation.Op{
+			Name:         "store.GetDumpForCommit",
+			MetricLabels: []string{"get_dump_for_commit"},
 			Metrics:      metrics,
 		}),
 		findClosestDumpsOperation: observationContext.Operation(observation.Op{
@@ -381,6 +387,7 @@ func (s *ObservedStore) wrap(other Store) Store {
 		deleteUploadByIDOperation:                      s.deleteUploadByIDOperation,
 		resetStalledOperation:                          s.resetStalledOperation,
 		getDumpByIDOperation:                           s.getDumpByIDOperation,
+		getDumpForCommitOperation:                      s.getDumpForCommitOperation,
 		findClosestDumpsOperation:                      s.findClosestDumpsOperation,
 		findClosestDumpsFromGraphFragmentOperation:     s.findClosestDumpsFromGraphFragmentOperation,
 		deleteOldestDumpOperation:                      s.deleteOldestDumpOperation,
@@ -580,6 +587,13 @@ func (s *ObservedStore) GetDumpByID(ctx context.Context, id int) (_ Dump, _ bool
 	ctx, endObservation := s.getDumpByIDOperation.With(ctx, &err, observation.Args{})
 	defer endObservation(1, observation.Args{})
 	return s.store.GetDumpByID(ctx, id)
+}
+
+// GetDumpForCommit calls into the inner store and registers the observed results.
+func (s *ObservedStore) GetDumpForCommit(ctx context.Context, repositoryID int, commit, indexer, root string) (_ Dump, _ bool, err error) {
+	ctx, endObservation := s.getDumpForCommitOperation.With(ctx, &err, observation.Args{})
+	defer endObservation(1, observation.Args{})
+	return s.store.GetDumpForCommit(ctx, repositoryID, commit, indexer, root)
 }
 
 // FindClosestDumps calls into the inner store and registers the observed results.

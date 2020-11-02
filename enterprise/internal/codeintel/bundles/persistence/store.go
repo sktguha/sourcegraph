@@ -37,3 +37,64 @@ type Store interface {
 	WriteDefinitions(ctx context.Context, monikerLocations chan types.MonikerLocations) error
 	WriteReferences(ctx context.Context, monikerLocations chan types.MonikerLocations) error
 }
+
+func DocumentsReferencing(ctx context.Context, s Store, paths []string) ([]string, error) {
+	pathMap := map[string]struct{}{}
+	for _, path := range paths {
+		pathMap[path] = struct{}{}
+	}
+
+	meta, err := s.ReadMeta(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resultIDs := map[types.ID]struct{}{}
+	for i := 0; i < meta.NumResultChunks; i++ {
+		resultChunk, exists, err := s.ReadResultChunk(ctx, i)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			// TODO(efritz) - document that this should be fine
+			continue
+		}
+
+		for resultID, documentIDRangeIDs := range resultChunk.DocumentIDRangeIDs {
+			for _, documentIDRangeID := range documentIDRangeIDs {
+				// Skip results that do not point into one of the given documents
+				if _, ok := pathMap[resultChunk.DocumentPaths[documentIDRangeID.DocumentID]]; !ok {
+					continue
+				}
+
+				resultIDs[resultID] = struct{}{}
+			}
+		}
+	}
+
+	allPaths, err := s.PathsWithPrefix(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+
+	var pathsReferencing []string
+	for _, path := range allPaths {
+		document, exists, err := s.ReadDocument(ctx, path)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			// TODO(efritz) - add error here - document should definitely exist
+			continue
+		}
+
+		for _, r := range document.Ranges {
+			if _, ok := resultIDs[r.DefinitionResultID]; ok {
+				pathsReferencing = append(pathsReferencing, path)
+				break
+			}
+		}
+	}
+
+	return pathsReferencing, nil
+}

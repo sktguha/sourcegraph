@@ -64,7 +64,7 @@ func Init(ctx context.Context, enterpriseServices *enterprise.Services) error {
 	))
 
 	newCodeIntelUploadHandler := func(internal bool) http.Handler {
-		return codeintelhttpapi.NewUploadHandler(store, bundleManagerClient, internal)
+		return codeintelhttpapi.NewUploadHandler(store, codeIntelDB, bundleManagerClient, internal, observationContext)
 	}
 
 	enterpriseServices.NewCodeIntelUploadHandler = newCodeIntelUploadHandler

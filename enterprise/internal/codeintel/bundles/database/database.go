@@ -11,6 +11,7 @@ import (
 	bundles "github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/bundles/client_types"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/bundles/persistence"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/bundles/types"
+	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/bundles/util"
 	"github.com/sourcegraph/sourcegraph/internal/trace/ot"
 )
 
@@ -113,7 +114,7 @@ func (db *databaseImpl) Ranges(ctx context.Context, path string, startLine, endL
 
 	var rangeIDs []types.ID
 	for id, r := range documentData.Ranges {
-		if rangeIntersectsSpan(r, startLine, endLine) {
+		if util.RangeIntersectsSpan(r, startLine, endLine) {
 			rangeIDs = append(rangeIDs, id)
 		}
 	}
@@ -447,7 +448,7 @@ func (db *databaseImpl) getRangeByPosition(ctx context.Context, path string, lin
 		return types.DocumentData{}, nil, false, nil
 	}
 
-	return documentData, findRanges(documentData.Ranges, line, character), true, nil
+	return documentData, util.FindRanges(documentData.Ranges, line, character), true, nil
 }
 
 // locations returns the locations for the given definition or reference identifiers.

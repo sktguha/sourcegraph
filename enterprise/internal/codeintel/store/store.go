@@ -93,6 +93,9 @@ type Store interface {
 	// GetDumpByID returns a dump by its identifier and boolean flag indicating its existence.
 	GetDumpByID(ctx context.Context, id int) (Dump, bool, error)
 
+	// TODO(efritz) - document
+	GetDumpForCommit(ctx context.Context, repositoryID int, commit, indexer, root string) (Dump, bool, error)
+
 	// FindClosestDumps returns the set of dumps that can most accurately answer queries for the given repository, commit, path, and
 	// optional indexer. If rootMustEnclosePath is true, then only dumps with a root which is a prefix of path are returned. Otherwise,
 	// any dump with a root intersecting the given path is returned.

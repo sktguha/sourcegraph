@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,11 +17,15 @@ import (
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/backend"
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/types"
 	bundles "github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/bundles/client"
+	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/bundles/persistence"
+	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/bundles/persistence/postgres"
+	codeintelgitserver "github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/gitserver"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/store"
 	"github.com/sourcegraph/sourcegraph/internal/api"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
 	"github.com/sourcegraph/sourcegraph/internal/errcode"
 	"github.com/sourcegraph/sourcegraph/internal/gitserver"
+	"github.com/sourcegraph/sourcegraph/internal/observation"
 	"github.com/sourcegraph/sourcegraph/internal/vcs"
 )
 
@@ -28,13 +33,17 @@ type UploadHandler struct {
 	store               store.Store
 	bundleManagerClient bundles.BundleManagerClient
 	internal            bool
+	createStore         func(id int) persistence.Store
 }
 
-func NewUploadHandler(store store.Store, bundleManagerClient bundles.BundleManagerClient, internal bool) http.Handler {
+func NewUploadHandler(store store.Store, codeIntelDB *sql.DB, bundleManagerClient bundles.BundleManagerClient, internal bool, observationContext *observation.Context) http.Handler {
 	handler := &UploadHandler{
 		store:               store,
 		bundleManagerClient: bundleManagerClient,
 		internal:            internal,
+		createStore: func(id int) persistence.Store {
+			return persistence.NewObserved(postgres.NewStore(codeIntelDB, id), observationContext)
+		},
 	}
 
 	return http.HandlerFunc(handler.handleEnqueue)
@@ -102,11 +111,21 @@ type UploadArgs struct {
 	Root         string
 	RepositoryID int
 	Indexer      string
+	// if this index is incomplete and needs to be patched onto an existing index,
+	// the commit of that index
+	BaseCommit *string
 }
 
 type enqueuePayload struct {
 	ID string `json:"id"`
 }
+
+type pathsToIndexResp struct {
+	BaseCommit string   `json:"baseCommit"`
+	Paths      []string `json:"paths"`
+}
+
+//    - POST `/upload?repositoryId,commit,root,indexerName,baseCommit,getIncrementalPaths=true`
 
 // handleEnqueueErr dispatches to the correct handler function based on query args. Running the
 // `src lsif upload` command will cause one of two sequences of requests to occur. For uploads that
@@ -135,6 +154,17 @@ func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request,
 		Root:         sanitizeRoot(getQuery(r, "root")),
 		RepositoryID: repositoryID,
 		Indexer:      getQuery(r, "indexerName"),
+	}
+
+	if hasQuery(r, "getIncrementalPaths") {
+		if getQueryBool(r, "getIncrementalPaths") {
+			return h.handlePathsToIndex(r, uploadArgs)
+		}
+	}
+
+	if hasQuery(r, "baseCommit") {
+		baseCommit := getQuery(r, "baseCommit")
+		uploadArgs.BaseCommit = &baseCommit
 	}
 
 	if !hasQuery(r, "multiPart") && !hasQuery(r, "uploadId") {
@@ -174,6 +204,43 @@ func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request,
 	}
 
 	return nil, clientError("no index supplied")
+}
+
+func (h *UploadHandler) handlePathsToIndex(r *http.Request, uploadArgs UploadArgs) (interface{}, error) {
+	ctx := r.Context()
+
+	dumps, err := h.store.FindClosestDumps(ctx, uploadArgs.RepositoryID, uploadArgs.Commit, uploadArgs.Root, false, uploadArgs.Indexer)
+	if err != nil {
+		return nil, err
+	}
+
+	dump := dumps[0]
+	baseCommit := dump.Commit
+
+	statuses, err := codeintelgitserver.DiffFileStatus(ctx, h.store, uploadArgs.RepositoryID, baseCommit, uploadArgs.Commit)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var diffedPaths []string
+	for path, status := range statuses {
+		if status != codeintelgitserver.Added && status != codeintelgitserver.Unchanged {
+			diffedPaths = append(diffedPaths, path)
+		}
+	}
+
+	store := h.createStore(dump.ID)
+	pathsToIndex, err := persistence.DocumentsReferencing(ctx, store, diffedPaths)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return pathsToIndexResp{
+		BaseCommit: dumps[0].Commit,
+		Paths:      pathsToIndex,
+	}, nil
 }
 
 // handleEnqueueSinglePayload handles a non-multipart upload. This creates an upload record
@@ -225,6 +292,7 @@ func (h *UploadHandler) handleEnqueueSinglePayload(r *http.Request, uploadArgs U
 		State:         "uploading",
 		NumParts:      1,
 		UploadedParts: []int{0},
+		BaseCommit:    uploadArgs.BaseCommit,
 	})
 	if err != nil {
 		return nil, err
@@ -264,6 +332,7 @@ func (h *UploadHandler) handleEnqueueMultipartSetup(r *http.Request, uploadArgs 
 		State:         "uploading",
 		NumParts:      numParts,
 		UploadedParts: nil,
+		BaseCommit:    uploadArgs.BaseCommit,
 	})
 	if err != nil {
 		return nil, err
