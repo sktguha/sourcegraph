@@ -51,7 +51,7 @@ func (c *Container) validate() error {
 		return fmt.Errorf("Container.Title must be in Title Case; found \"%s\" want \"%s\"", c.Title, strings.Title(c.Title))
 	}
 	if c.Description != withPeriod(c.Description) || c.Description != upperFirst(c.Description) {
-		return fmt.Errorf("Container.Description must be sentence starting with an uppercas eletter and ending with period; found \"%s\"", c.Description)
+		return fmt.Errorf("Container.Description must be sentence starting with an uppercase letter and ending with period; found \"%s\"", c.Description)
 	}
 	for _, g := range c.Groups {
 		if err := g.validate(); err != nil {
@@ -138,7 +138,7 @@ type Observable struct {
 	//
 	Name string
 
-	// Description is a human-readable description of exactly what is being observed.
+	// Description is a REQUIRED human-readable description of exactly what is being observed.
 	//
 	// Good examples:
 	//
@@ -222,6 +222,10 @@ func (o Observable) validate() error {
 	if strings.Contains(o.Name, " ") || strings.ToLower(o.Name) != o.Name {
 		return fmt.Errorf("Observable.Name must be in lower_snake_case; found \"%s\"", o.Name)
 	}
+	if o.Description == "" {
+		return fmt.Errorf("Observable.Description must not be empty")
+	}
+
 	if v := string([]rune(o.Description)[0]); v != strings.ToLower(v) {
 		return fmt.Errorf("Observable.Description must be lowercase; found \"%s\"", o.Description)
 	}
@@ -944,6 +948,7 @@ func main() {
 		Frontend(),
 		GitServer(),
 		GitHubProxy(),
+		Postgres(),
 		PreciseCodeIntelWorker(),
 		QueryRunner(),
 		RepoUpdater(),
