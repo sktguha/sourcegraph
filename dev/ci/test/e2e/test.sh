@@ -6,8 +6,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../../.." || exit
 
 set -x
 
-test/setup-deps.sh
-test/setup-display.sh
+dev/ci/test/setup-deps.sh
+dev/ci/test/setup-display.sh
 
 # ==========================
 
@@ -20,4 +20,4 @@ docker image rm -f "${IMAGE}"
 
 # ==========================
 
-test/cleanup-display.sh
+dev/ci/test/cleanup-display.sh
