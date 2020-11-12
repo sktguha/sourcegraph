@@ -2,12 +2,11 @@
 
 # shellcheck disable=SC1091
 source /root/.profile
-cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.." || exit
 
 set -x
 
 test/setup-deps.sh
-test/setup-display.sh
 
 # ==========================
 
@@ -35,12 +34,13 @@ echo "TEST: Checking Sourcegraph instance is accessible"
 curl -f http://localhost:7080
 curl -f http://localhost:7080/healthz
 echo "TEST: Running tests"
-pushd client/web || exit
-yarn run test:regression:core
-yarn run test:regression:integrations
-yarn run test:regression:search
+pushd internal/cmd/precise-code-intel-tester || exit
+go build
+./precise-code-intel-tester addrepos
+./scripts/download.sh
+./precise-code-intel-tester upload
+sleep 10
+./precise-code-intel-tester query
 popd || exit
 
 # ==========================
-
-test/cleanup-display.sh
