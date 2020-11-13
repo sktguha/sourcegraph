@@ -46,7 +46,6 @@ function test_setup() {
   trap kubectl_logs EXIT
 
   set -x
-  echo "dax done"
 
   test/setup-deps.sh
   test/setup-display.sh
@@ -82,7 +81,6 @@ function e2e() {
 cluster_setup
 test_setup
 e2e
-
 
 # ==========================
 test/cleanup-display.sh
