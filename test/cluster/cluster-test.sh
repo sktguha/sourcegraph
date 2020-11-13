@@ -5,15 +5,18 @@ set -euxo pipefail
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)""
 # cd to repo root
 cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit
-git clone --depth 1 \
-  https://github.com/sourcegraph/deploy-sourcegraph.git \
-  "$DIR/deploy-sourcegraph"
+
+function cluster_setup() {
+#git clone --depth 1 \
+#  https://github.com/sourcegraph/deploy-sourcegraph.git \
+#  "$DIR/deploy-sourcegraph"
 
 #NAMESPACE="cluster-ci-$BUILDKITE_BUILD_NUMBER"
 # TODO(Dax): Buildkite cannot create namespaces at cluster level
 NAMESPACE=cluster-ci-122
 #kubectl create namespace "$NAMESPACE"
-kubectl config current-context
+
+#kubectl config current-context
 kubectl apply -f "$DIR/storageClass.yaml"
 kubectl config set-context --current --namespace="$NAMESPACE"
 kubectl get pods
@@ -27,46 +30,57 @@ popd
 kubectl get pods
 time kubectl wait --for=condition=Ready -l app=sourcegraph-frontend pod \
   --timeout=20m
-LOGFILE=frontend-logs
-# kubectl logs
-kubectl_logs() {
-  echo "Appending frontend logs"
-  kubectl logs -l "app=sourcegraph-frontend" -c frontend >>$LOGFILE.log
-  chmod 744 $LOGFILE.log
-  #kubectl delete namespace $NAMESPACE
 }
-trap kubectl_logs EXIT
 
-set -x
-echo "dax done"
+function test_setup() {
+  LOGFILE=frontend-logs
+  # kubectl logs
+  kubectl_logs() {
+    echo "Appending frontend logs"
+    kubectl logs -l "app=sourcegraph-frontend" -c frontend >>$LOGFILE.log
+    chmod 744 $LOGFILE.log
+    #kubectl delete namespace $NAMESPACE
+  }
+  trap kubectl_logs EXIT
 
-test/setup-deps.sh
-test/setup-display.sh
+  set -x
+  echo "dax done"
 
-sleep 15
-SOURCEGRAPH_URL=http://sourcegraph-frontend.dogfood-k8s.svc.cluster.local:30080
-curl $SOURCEGRAPH_URL
+  test/setup-deps.sh
+  test/setup-display.sh
 
-# setup admin users, etc
-go run ../init-server.go -base-url=$SOURCEGRAPH_URL
+  sleep 15
+  SOURCEGRAPH_URL=http://sourcegraph-frontend.dogfood-k8s.svc.cluster.local:30080
+  curl $SOURCEGRAPH_URL
 
-# Load variables set up by init-server, disabling `-x` to avoid printing variables
-set +x
-# shellcheck disable=SC1091
-source /root/.profile
-set -x
+  # setup admin users, etc
+  go run ../init-server.go -base-url=$SOURCEGRAPH_URL
 
-echo "TEST: Checking Sourcegraph instance is accessible"
+  # Load variables set up by init-server, disabling `-x` to avoid printing variables
+  set +x
+  # shellcheck disable=SC1091
+  source /root/.profile
+  set -x
 
-curl --fail $SOURCEGRAPH_URL
-curl --fail "$SOURCEGRAPH_URL/healthz"
-echo "TEST: Running tests"
-pushd client/web || exit
-yarn run test:regression:core
+  echo "TEST: Checking Sourcegraph instance is accessible"
 
-popd || exit
+  curl --fail $SOURCEGRAPH_URL
+  curl --fail "$SOURCEGRAPH_URL/healthz"
+}
 
-kubectl get pods
+function e2e() {
+  echo "TEST: Running tests"
+  pushd client/web || exit
+  yarn run test:regression:core
+
+  popd || exit
+}
+
+# main
+cluster_setup
+test_setup
+e2e
+
 
 # ==========================
 test/cleanup-display.sh
