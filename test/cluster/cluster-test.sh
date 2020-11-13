@@ -13,8 +13,9 @@ git clone --depth 1 \
 
 #NAMESPACE="cluster-ci-$BUILDKITE_BUILD_NUMBER"
 # TODO(Dax): Buildkite cannot create namespaces at cluster level
-NAMESPACE=cluster-ci-122
-#kubectl create namespace "$NAMESPACE"
+export NAMESPACE=cluster-ci-122
+kubeclt create create ns $NAMESPACE -oyaml --dry-run=client | kubectl apply -f -
+
 
 # TODO(Dax): Bit concerning this works...
 gcloud container clusters get-credentials default-buildkite --zone=us-central1-c --project=sourcegraph-ci
