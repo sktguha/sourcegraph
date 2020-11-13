@@ -73,6 +73,7 @@ function test_setup() {
 function e2e() {
   echo "TEST: Running tests"
   pushd client/web || exit
+  echo $SOURCEGRAPH_BASE_URL
   yarn run test:regression:core
 
   popd || exit
