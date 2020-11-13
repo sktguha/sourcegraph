@@ -48,7 +48,6 @@ function test_setup() {
   set -x
 
   test/setup-deps.sh
-  test/setup-display.sh
 
   sleep 15
   SOURCEGRAPH_URL="http://sourcegraph-frontend.$NAMESPACE.svc.cluster.local:30080"
