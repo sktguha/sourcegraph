@@ -56,8 +56,8 @@ function test_setup() {
   # setup admin users, etc
   go run test/init-server.go -base-url=$SOURCEGRAPH_URL
 
-  # Load variables set up by init-server, disabling `-x` to avoid printing variables
-  set +x
+  # Load variables set up by init-server, disabling `-x` to avoid printing variables, setting +u to avoid blowing up on ubound ones
+  set +x +u
   # shellcheck disable=SC1091
   source /root/.profile
   set -x
