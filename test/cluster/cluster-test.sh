@@ -17,6 +17,7 @@ NAMESPACE=cluster-ci-122
 #kubectl create namespace "$NAMESPACE"
 
 #kubectl config current-context
+# TODO(Dax): Can't apply resources at cluster scope
 kubectl apply -f "$DIR/storageClass.yaml"
 kubectl config set-context --current --namespace="$NAMESPACE"
 kubectl get pods
@@ -28,8 +29,7 @@ pwd
 popd
 
 kubectl get pods
-time kubectl wait --for=condition=Ready -l app=sourcegraph-frontend pod \
-  --timeout=20m
+time kubectl wait --for=condition=Ready -l app=sourcegraph-frontend pod --timeout=20m
 }
 
 function test_setup() {
