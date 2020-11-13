@@ -52,11 +52,11 @@ function test_setup() {
   test/setup-deps.sh
 
   sleep 15
-  SOURCEGRAPH_URL="http://sourcegraph-frontend.$NAMESPACE.svc.cluster.local:30080"
-  curl $SOURCEGRAPH_URL
+  SOURCEGRAPH_BASE_URL="http://sourcegraph-frontend.$NAMESPACE.svc.cluster.local:30080"
+  curl $SOURCEGRAPH_BASE_URL
 
   # setup admin users, etc
-  go run test/init-server.go -base-url=$SOURCEGRAPH_URL
+  go run test/init-server.go -base-url=$SOURCEGRAPH_BASE_URL
 
   # Load variables set up by init-server, disabling `-x` to avoid printing variables, setting +u to avoid blowing up on ubound ones
   set +x +u
@@ -66,8 +66,8 @@ function test_setup() {
 
   echo "TEST: Checking Sourcegraph instance is accessible"
 
-  curl --fail $SOURCEGRAPH_URL
-  curl --fail "$SOURCEGRAPH_URL/healthz"
+  curl --fail $SOURCEGRAPH_BASE_URL
+  curl --fail "$SOURCEGRAPH_BASE_URL/healthz"
 }
 
 function e2e() {
