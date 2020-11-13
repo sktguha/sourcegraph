@@ -7,20 +7,22 @@ DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)""
 cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit
 
 function cluster_setup() {
-#git clone --depth 1 \
-#  https://github.com/sourcegraph/deploy-sourcegraph.git \
-#  "$DIR/deploy-sourcegraph"
+git clone --depth 1 \
+  https://github.com/sourcegraph/deploy-sourcegraph.git \
+  "$DIR/deploy-sourcegraph"
 
 #NAMESPACE="cluster-ci-$BUILDKITE_BUILD_NUMBER"
 # TODO(Dax): Buildkite cannot create namespaces at cluster level
 NAMESPACE=cluster-ci-122
 #kubectl create namespace "$NAMESPACE"
 
-#kubectl config current-context
-# TODO(Dax): Can't apply resources at cluster scope
+# TODO(Dax): Bit concerning this works...
+gcloud container clusters get-credentials default-buildkite --zone=us-central1-c --project=sourcegraph-ci
+kubectl config current-context
+
 kubectl apply -f "$DIR/storageClass.yaml"
 kubectl config set-context --current --namespace="$NAMESPACE"
-kubectl get pods
+kubectl get -n $NAMESPACE pods
 
 pushd "$DIR/deploy-sourcegraph/"
 pwd
@@ -50,7 +52,7 @@ function test_setup() {
   test/setup-display.sh
 
   sleep 15
-  SOURCEGRAPH_URL=http://sourcegraph-frontend.dogfood-k8s.svc.cluster.local:30080
+  SOURCEGRAPH_URL="http://sourcegraph-frontend.$NAMESPACE.svc.cluster.local:30080"
   curl $SOURCEGRAPH_URL
 
   # setup admin users, etc
