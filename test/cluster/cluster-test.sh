@@ -45,7 +45,9 @@ function test_setup() {
   }
   trap kubectl_logs EXIT
 
-  set -x
+  set +x +u
+  # shellcheck disable=SC1091
+  source /root/.profile
 
   test/setup-deps.sh
 
