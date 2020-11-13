@@ -52,7 +52,7 @@ function test_setup() {
   test/setup-deps.sh
 
   sleep 15
-  SOURCEGRAPH_BASE_URL="http://sourcegraph-frontend.$NAMESPACE.svc.cluster.local:30080"
+  export SOURCEGRAPH_BASE_URL="http://sourcegraph-frontend.$NAMESPACE.svc.cluster.local:30080"
   curl $SOURCEGRAPH_BASE_URL
 
   # setup admin users, etc
@@ -72,12 +72,13 @@ function test_setup() {
 
 function e2e() {
   echo "TEST: Running tests"
-  pushd client/web || exit
+  pushd client/web
   echo $SOURCEGRAPH_BASE_URL
   # TODO: File issue for broken test
   #SOURCEGRAPH_BASE_URL="http://sourcegraph-frontend.$NAMESPACE.svc.cluster.local:30080" yarn run test:regression:core
-SOURCEGRAPH_BASE_URL="http://sourcegraph-frontend.$NAMESPACE.svc.cluster.local:30080" yarn run test:regression:config-settings
-  popd || exit
+
+  yarn run test:regression:config-settings
+  popd
 }
 
 # main
