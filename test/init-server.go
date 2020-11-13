@@ -52,8 +52,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if siteConfig.ExternalURL != "http://127.0.0.1:7080" {
-		siteConfig.ExternalURL = "http://127.0.0.1:7080"
+	if siteConfig.ExternalURL != *baseURL {
+		siteConfig.ExternalURL = *baseURL
 		err = client.UpdateSiteConfiguration(siteConfig)
 		if err != nil {
 			log.Fatal(err)
