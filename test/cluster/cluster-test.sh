@@ -36,7 +36,7 @@ time kubectl wait --for=condition=Ready -l app=sourcegraph-frontend pod --timeou
 }
 
 function test_setup() {
-#  LOGFILE=frontend-logs
+# LOGFILE=frontend-logs
 # kubectl logs
 #  kubectl_logs() {
 #    echo "Appending frontend logs"
@@ -86,6 +86,3 @@ function e2e() {
 cluster_setup
 test_setup
 e2e
-
-# ==========================
-test/cleanup-display.sh
