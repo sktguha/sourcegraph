@@ -17,6 +17,7 @@ export enum RegexpMetaKind {
     CharacterClass = 'CharacterClass', // like [a-z]
     Quantifier = 'Quantifier', // like +
     Assertion = 'Assertion', // like ^ or \b
+    EscapedCharacter = 'EscapedCharacter', // like \(
 }
 
 export interface RegexpMeta {
@@ -130,6 +131,16 @@ const mapRegexpMeta = (pattern: Pattern): DecoratedToken[] => {
                 }
             },
             onCharacterEnter(node: Character) {
+                if (node.end - node.start > 1 && node.raw.startsWith('\\')) {
+                    // This is an escaped value like `\.`, `\u0065`, `\x65`.
+                    tokens.push({
+                        type: 'regexpMeta',
+                        range: { start: offset + node.start, end: offset + node.end },
+                        value: node.raw,
+                        kind: RegexpMetaKind.EscapedCharacter,
+                    })
+                    return
+                }
                 tokens.push({
                     type: 'pattern',
                     range: { start: offset + node.start, end: offset + node.end },
