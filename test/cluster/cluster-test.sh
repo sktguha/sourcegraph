@@ -7,14 +7,14 @@ DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)""
 cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit
 
 function cluster_setup() {
-git clone --depth 1 \
+git clone --depth 1 --branch v3.21.2 \
   https://github.com/sourcegraph/deploy-sourcegraph.git \
   "$DIR/deploy-sourcegraph"
 
 #NAMESPACE="cluster-ci-$BUILDKITE_BUILD_NUMBER"
 # TODO(Dax): Buildkite cannot create namespaces at cluster level
 export NAMESPACE=cluster-ci-122
-kubeclt create create ns $NAMESPACE -oyaml --dry-run=client | kubectl apply -f -
+kubectl create create ns $NAMESPACE -oyaml --dry-run=client | kubectl apply -f -
 
 
 # TODO(Dax): Bit concerning this works...
