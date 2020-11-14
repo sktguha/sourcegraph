@@ -9,6 +9,7 @@ import {
     CapturingGroup,
     Assertion,
     Quantifier,
+    Alternative,
 } from 'regexpp/ast'
 
 export enum RegexpMetaKind {
@@ -18,6 +19,7 @@ export enum RegexpMetaKind {
     Quantifier = 'Quantifier', // like +
     Assertion = 'Assertion', // like ^ or \b
     EscapedCharacter = 'EscapedCharacter', // like \(
+    Alternative = 'Alternative', // like |
 }
 
 export interface RegexpMeta {
@@ -127,6 +129,31 @@ const mapRegexpMeta = (pattern: Pattern): DecoratedToken[] => {
                         range: { start: offset + node.start, end: offset + node.end },
                         value: node.raw,
                         kind: PatternKind.Regexp,
+                    })
+                }
+            },
+            onAlternativeEnter(node: Alternative) {
+                console.log(
+                    `entered ${node.raw}, parent ${node.parent.raw}, 
+                    start pos: ${node.start}, char ${node.raw[node.start]} parent ${node.parent.raw[node.start]}
+                    end pos: ${node.end}, char ${node.raw[node.end]} parent ${node.parent.raw[node.end]}
+                    parent start pos: ${node.parent.start}, char ${node.parent.raw[node.parent.start]}
+                    parent end pos: ${node.parent.end}, char ${node.parent.raw[node.parent.end]}`
+                )
+                // WIP: (((is|pop|x)))
+
+                // Identify `|` operators. The proper way to do this is to visit the Alternative
+                // node, which visits arbitrary patterns A, B in A|B, and then inspecting the
+                // parent node for `|` after these patterns. This because there is no direct
+                // way to visit `|`, and we don't want to, e.g., identify `|` in character sets as
+                // `|` operators.
+                const parentPattern = node.parent.raw
+                if (parentPattern[node.start] && parentPattern[node.start] === '|') {
+                    tokens.push({
+                        type: 'regexpMeta',
+                        range: { start: offset + node.end, end: offset + node.end + 1 },
+                        value: '|',
+                        kind: RegexpMetaKind.Alternative,
                     })
                 }
             },
