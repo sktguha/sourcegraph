@@ -14,7 +14,7 @@ git clone --depth 1 --branch v3.21.2 \
 #NAMESPACE="cluster-ci-$BUILDKITE_BUILD_NUMBER"
 # TODO(Dax): Buildkite cannot create namespaces at cluster level
 export NAMESPACE=cluster-ci-122
-kubectl create create ns $NAMESPACE -oyaml --dry-run=client | kubectl apply -f -
+kubectl create ns $NAMESPACE -oyaml --dry-run | kubectl apply -f -
 
 
 # TODO(Dax): Bit concerning this works...
