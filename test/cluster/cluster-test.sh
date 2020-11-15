@@ -11,18 +11,18 @@ git clone --depth 1 --branch v3.20.1 \
   https://github.com/sourcegraph/deploy-sourcegraph.git \
   "$DIR/deploy-sourcegraph"
 
+
+# TODO(Dax): Bit concerning this works...
+gcloud container clusters get-credentials default-buildkite --zone=us-central1-c --project=sourcegraph-ci
+
 #NAMESPACE="cluster-ci-$BUILDKITE_BUILD_NUMBER"
 # TODO(Dax): Buildkite cannot create namespaces at cluster level
 export NAMESPACE=cluster-ci-122
 kubectl create ns $NAMESPACE -oyaml --dry-run | kubectl apply -f -
-
-
-# TODO(Dax): Bit concerning this works...
-gcloud container clusters get-credentials default-buildkite --zone=us-central1-c --project=sourcegraph-ci
-kubectl config current-context
-
 kubectl apply -f "$DIR/storageClass.yaml"
 kubectl config set-context --current --namespace="$NAMESPACE"
+kubectl config current-context
+sleep 15  #wait for namespace to come up
 kubectl get -n $NAMESPACE pods
 
 pushd "$DIR/deploy-sourcegraph/"
