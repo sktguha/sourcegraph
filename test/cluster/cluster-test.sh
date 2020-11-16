@@ -16,7 +16,6 @@ git clone --depth 1 --branch v3.20.1 \
 gcloud container clusters get-credentials default-buildkite --zone=us-central1-c --project=sourcegraph-ci
 
 #NAMESPACE="cluster-ci-$BUILDKITE_BUILD_NUMBER"
-# TODO(Dax): Buildkite cannot create namespaces at cluster level
 export NAMESPACE=cluster-ci-122
 kubectl create ns $NAMESPACE -oyaml --dry-run | kubectl apply -f -
 kubectl apply -f "$DIR/storageClass.yaml"
@@ -77,7 +76,7 @@ function e2e() {
   echo $SOURCEGRAPH_BASE_URL
   # TODO: File issue for broken test
   #SOURCEGRAPH_BASE_URL="http://sourcegraph-frontend.$NAMESPACE.svc.cluster.local:30080" yarn run test:regression:core
-
+  yarn run test:regression:core
   yarn run test:regression:config-settings
   popd
 }
