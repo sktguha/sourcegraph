@@ -32,8 +32,8 @@ popd
 
 kubectl get pods
 time kubectl wait --for=condition=Ready -l app=sourcegraph-frontend pod --timeout=20m
-# Cleanup when done
-trap kubectl delete namespace $NAMESPACE EXIT
+#shellcheck disable=SC2064
+trap "kubectl delete namespace $NAMESPACE" EXIT
 }
 
 function test_setup() {
